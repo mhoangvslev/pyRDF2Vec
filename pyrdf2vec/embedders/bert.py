@@ -45,7 +45,7 @@ class BERT(Embedder):
             warmup_steps=500,
             weight_decay=0.2,
             logging_dir="./logs",
-            dataloader_num_workers=2,
+            dataloader_num_workers=16,
             prediction_loss_only=True,
         ),
         validator=attr.validators.instance_of(TrainingArguments),

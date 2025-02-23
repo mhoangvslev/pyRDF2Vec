@@ -3,6 +3,8 @@ from __future__ import annotations
 import itertools
 from typing import List
 
+from tqdm import tqdm
+
 import attr
 import numpy as np
 from gensim.models.doc2vec import Doc2Vec as D2V
@@ -101,5 +103,5 @@ class Doc2Vec(Embedder):
                     if walk[0] == entity
                 ]
             )
-            for entity in entities
+            for entity in tqdm(entities)
         ]

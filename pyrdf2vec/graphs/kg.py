@@ -111,8 +111,10 @@ class KG:
         validator=attr.validators.optional(attr.validators.instance_of(Cache)),
     )
 
-    connector = attr.ib(
-        init=False, default=None, type=SPARQLConnector, repr=False
+    _connector = attr.ib(
+        default=None, 
+        type=SPARQLConnector, 
+        repr=False
     )
 
     _is_remote = attr.ib(
@@ -146,9 +148,13 @@ class KG:
             ) or self.location.startswith("https://")
 
             if self._is_remote is True:
-                self.connector = SPARQLConnector(
-                    self.location, cache=self.cache
-                )
+                if self._connector is None:
+                    self._connector = SPARQLConnector(
+                        self.location, cache=self.cache
+                    )
+                else:
+                    self._connector.cache = self.cache
+                
             elif self.location is not None:
                 for subj, pred, obj in rdflib.Graph().parse(
                     self.location, format=self.fmt
@@ -234,7 +240,7 @@ class KG:
         elif vertex.name.startswith("http://") or vertex.name.startswith(
             "https://"
         ):
-            res = self.connector.fetch(self.connector.get_query(vertex.name))
+            res = self._connector.fetch(self._connector.get_query(vertex.name))
             hops = self._res2hops(vertex, res["results"]["bindings"])
         return hops
 
@@ -275,7 +281,7 @@ class KG:
 
         if self._is_remote:
             queries = [
-                self.connector.get_query(entity, pchain)
+                self._connector.get_query(entity, pchain)
                 for entity in tqdm(
                     entities, disable=True if verbose == 0 else False
                 )
@@ -284,12 +290,12 @@ class KG:
             ]
 
             if self.mul_req:
-                responses = asyncio.run(self.connector.afetch(queries))
+                responses = asyncio.run(self._connector.afetch(queries))
             else:
-                responses = [self.connector.fetch(query) for query in queries]
+                responses = [self._connector.fetch(query) for query in queries]
 
             literals_responses = [
-                self.connector.res2literals(
+                self._connector.res2literals(
                     res["results"]["bindings"]  # type: ignore
                 )
                 for res in responses
@@ -366,10 +372,10 @@ class KG:
             if self.mul_req:
                 responses = [
                     res["boolean"]  # type: ignore
-                    for res in asyncio.run(self.connector.afetch(queries))
+                    for res in asyncio.run(self._connector.afetch(queries))
                 ]
             else:
-                responses = [self.connector.fetch(query) for query in queries]
+                responses = [self._connector.fetch(query) for query in queries]
                 responses = [res["boolean"] for res in responses]
             return False not in responses
         return all([Vertex(entity) in self._vertices for entity in entities])
@@ -432,10 +438,10 @@ class KG:
             vertices: The vertices to get the hops.
 
         """
-        queries = [self.connector.get_query(entity) for entity in entities]
+        queries = [self._connector.get_query(entity) for entity in entities]
         for entity, res in zip(
             entities,
-            asyncio.run(self.connector.afetch(queries)),
+            asyncio.run(self._connector.afetch(queries)),
         ):
             hops = self._res2hops(
                 Vertex(entity), res["results"]["bindings"]  # type: ignore

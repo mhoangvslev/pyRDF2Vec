@@ -165,7 +165,7 @@ class RDF2VecTransformer:
         """
         if kg.skip_verify is False and not kg.is_exist(entities):
             if kg.mul_req:
-                asyncio.run(kg.connector.close())
+                asyncio.run(kg._connector.close())
             raise ValueError(
                 "At least one provided entity does not exist in the "
                 + "Knowledge Graph."
@@ -195,7 +195,7 @@ class RDF2VecTransformer:
             and kg.mul_req
             and not self._is_extract_walks_literals
         ):
-            asyncio.run(kg.connector.close())
+            asyncio.run(kg._connector.close())
         return walks
 
     def transform(
@@ -226,7 +226,7 @@ class RDF2VecTransformer:
 
         if kg._is_remote and kg.mul_req:
             self._is_extract_walks_literals = False
-            asyncio.run(kg.connector.close())
+            asyncio.run(kg._connector.close())
 
         if self.verbose >= 1 and len(literals) > 0:
             print(
