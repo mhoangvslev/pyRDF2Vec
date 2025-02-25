@@ -62,6 +62,15 @@ class RDF2VecTransformer:
         ),
     )
 
+    def _default_walk_preprocessor(walk: SWalk) -> SWalk:
+        return walk
+
+    walk_preprocessor = attr.ib(
+        default=_default_walk_preprocessor,
+        type=Callable[[SWalk], SWalk],
+        validator=attr.validators.instance_of(Callable),
+    )
+
     verbose = attr.ib(
         kw_only=True,
         default=0,
@@ -177,8 +186,17 @@ class RDF2VecTransformer:
 
         walks: List[List[SWalk]] = []
         tic = time.perf_counter()
+        if self.verbose >= 1:
+            print("Extracting walks...")
         for walker in self.walkers:
             walks += walker.extract(kg, entities, self.verbose)
+        
+        if self.verbose >= 1:
+            print("Post-processing walks...")
+        walks = [
+            [self.walk_preprocessor(walk) for walk in entity_walks]
+            for entity_walks in walks
+        ]
         toc = time.perf_counter()
 
         self._update(self._entities, entities)
@@ -190,17 +208,11 @@ class RDF2VecTransformer:
                 f"Extracted {n_walks} walks "
                 + f"for {len(entities)} entities ({toc - tic:0.4f}s)"
             )
-        if (
-            kg._is_remote
-            and kg.mul_req
-            and not self._is_extract_walks_literals
-        ):
+        if kg._is_remote and kg.mul_req and not self._is_extract_walks_literals:
             asyncio.run(kg._connector.close())
         return walks
 
-    def transform(
-        self, kg: KG, entities: Entities
-    ) -> Tuple[Embeddings, Literals]:
+    def transform(self, kg: KG, entities: Entities) -> Tuple[Embeddings, Literals]:
         """Transforms the provided entities into embeddings and literals.
 
         Args:
@@ -285,7 +297,5 @@ class RDF2VecTransformer:
         with open(filename, "rb") as f:
             transformer = pickle.load(f)
             if not isinstance(transformer, RDF2VecTransformer):
-                raise ValueError(
-                    "Failed to load the RDF2VecTransformer object"
-                )
+                raise ValueError("Failed to load the RDF2VecTransformer object")
             return transformer
