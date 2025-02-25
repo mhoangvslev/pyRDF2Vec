@@ -49,3 +49,37 @@ class Embedder(metaclass=abc.ABCMeta):
 
         """
         raise NotImplementedError("This has to be implemented")
+    
+    @abc.abstractmethod
+    def predict(self, walks: List[List[SWalk]]) -> Embeddings:
+        """Predicts the embeddings of the provided entities.
+
+        Args:
+            entities: The entities to predict the embeddings.
+
+        Returns:
+            The embeddings of the provided entities.
+
+        Raises:
+            NotImplementedError: If this method is called, without having
+                provided an implementation.
+
+        """
+        raise NotImplementedError("This has to be implemented")
+    
+    @abc.abstractmethod
+    def init(self, walks: List[List[SWalk]]) -> Embedder:
+        """Initializes the model based on provided walks.
+
+        Args:
+            walks: The walks to create the corpus to to fit the model.
+
+        Returns:
+            The initialized model.
+
+        Raises:
+            NotImplementedError: If this method is called, without having
+                provided an implementation.
+
+        """
+        raise NotImplementedError("This has to be implemented")

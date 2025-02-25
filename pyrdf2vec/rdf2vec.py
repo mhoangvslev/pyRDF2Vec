@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import asyncio
+import multiprocessing
 import pickle
 import time
-from typing import List, Sequence, Tuple
+from typing import Callable, Dict, List, Sequence, Tuple
 
 import attr
 
@@ -11,6 +12,8 @@ from pyrdf2vec.embedders import Embedder, Word2Vec
 from pyrdf2vec.graphs import KG
 from pyrdf2vec.typings import Embeddings, Entities, Literals, SWalk
 from pyrdf2vec.walkers import RandomWalker, Walker
+
+from tqdm import tqdm
 
 
 @attr.s
@@ -123,14 +126,55 @@ class RDF2VecTransformer:
             n_walks = sum([len(entity_walks) for entity_walks in walks])
             print(f"Fitted {n_walks} walks ({toc - tic:0.4f}s)")
             if len(self._walks) != len(walks):
-                n_walks = sum(
-                    [len(entity_walks) for entity_walks in self._walks]
-                )
+                n_walks = sum([len(entity_walks) for entity_walks in tqdm(self._walks)])
                 print(
                     f"> {n_walks} walks extracted "
                     + f"for {len(self._entities)} entities."
                 )
         return self
+
+    def _predict(self, ent_entity_walks: List[SWalk]) -> Embeddings:
+        entity, entity_walks = ent_entity_walks
+        walks_embeddings = self.embedder.predict([entity_walks])
+
+        return {"entity": entity, "walks": entity_walks, "embeddings": walks_embeddings}
+
+    def predict(self, kg: KG, entities: Entities, n_jobs=4) -> List[Dict]:
+        """Predicts the embeddings of the provided entities.
+
+        Args:
+            entities: The entities to predict the embeddings.
+
+        Returns:
+            The embeddings of the provided entities.
+
+        """
+        if self.verbose == 2:
+            print(self.embedder)
+
+        tic = time.perf_counter()
+        rs: List[Dict] = []
+
+        all_walks: List[List[SWalk]] = self.get_walks(kg, entities, update=False)
+        self.embedder.init(all_walks)
+
+        with multiprocessing.Pool(processes=n_jobs) as pool:
+            rs = list(
+                tqdm(
+                    pool.imap(self._predict, list(zip(entities, all_walks))),
+                    total=len(all_walks),
+                    disable=True if self.verbose == 0 else False,
+                )
+            )
+
+        toc = time.perf_counter()
+
+        if self.verbose >= 1:
+            n_walks = sum([len(entity_walks) for entity_walks in all_walks])
+
+            print(f"Fitted {n_walks} walks ({toc - tic:0.4f}s)")
+
+        return rs
 
     def fit_transform(
         self, kg: KG, entities: Entities, is_update: bool = False
@@ -155,7 +199,7 @@ class RDF2VecTransformer:
         self.fit(kg, entities, is_update)
         return self.transform(kg, entities)
 
-    def get_walks(self, kg: KG, entities: Entities) -> List[List[SWalk]]:
+    def get_walks(self, kg: KG, entities: Entities, update=True) -> List[List[SWalk]]:
         """Gets the walks of an entity based on a Knowledge Graph and a
         list of walkers
 
@@ -199,8 +243,9 @@ class RDF2VecTransformer:
         ]
         toc = time.perf_counter()
 
-        self._update(self._entities, entities)
-        self._update(self._walks, walks)
+        if update:
+            self._update(self._entities, entities)
+            self._update(self._walks, walks)
 
         if self.verbose >= 1:
             n_walks = sum([len(entity_walks) for entity_walks in walks])

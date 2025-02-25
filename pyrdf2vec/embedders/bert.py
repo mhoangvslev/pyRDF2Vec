@@ -1,4 +1,4 @@
-from typing import List
+from typing import Callable, Final, List
 
 import attr
 from sklearn.utils.validation import check_is_fitted
@@ -16,13 +16,18 @@ from transformers import (  # isort:skip
     TrainingArguments,
 )
 
+import torch
+from transformers.modeling_outputs import MaskedLMOutput
+
+import logging
+
+logging.getLogger("transformers.modeling_utils").setLevel(logging.ERROR)
+
 
 class WalkDataset(Dataset):
     def __init__(self, corpus, tokenizer):
         self.walks = [
-            tokenizer(
-                " ".join(walk), padding=True, truncation=True, max_length=512
-            )
+            tokenizer(" ".join(walk), padding=True, truncation=True, max_length=512)
             for walk in corpus
         ]
 
@@ -45,7 +50,7 @@ class BERT(Embedder):
             warmup_steps=500,
             weight_decay=0.2,
             logging_dir="./logs",
-            dataloader_num_workers=16,
+            dataloader_num_workers=2,
             prediction_loss_only=True,
         ),
         validator=attr.validators.instance_of(TrainingArguments),
@@ -63,9 +68,17 @@ class BERT(Embedder):
         validator=attr.validators.instance_of(int),
     )
 
-    def _build_vocabulary(
-        self, nodes: List[str], is_update: bool = False
-    ) -> None:
+    from_local_pretrained: str = attr.ib(
+        default=None,
+        validator=attr.validators.optional(attr.validators.instance_of(str)),
+    )
+
+    from_pretrained: str = attr.ib(
+        default=None,
+        validator=attr.validators.optional(attr.validators.instance_of(str)),
+    )
+
+    def _build_vocabulary(self, nodes: List[str], is_update: bool = False) -> None:
         """Build the BERT vocabulary with entities.
 
         Args:
@@ -83,6 +96,35 @@ class BERT(Embedder):
                 f.write(f"{node}\n")
                 self._vocabulary_size += 1
 
+    def init(self, walks: List[List[SWalk]]):
+        self._corpus = [walk for entity_walks in walks for walk in entity_walks]
+        nodes = list({node for walk in self._corpus for node in walk})
+        self._build_vocabulary(nodes)
+
+        if self.from_pretrained:
+            self._model: BertForMaskedLM = BertForMaskedLM.from_pretrained(
+                self.from_pretrained,
+                output_hidden_states=True,
+                ignore_mismatched_sizes=True,
+            )
+            self.tokenizer: BertTokenizer = BertTokenizer.from_pretrained(
+                self.from_pretrained
+            )
+            # self.tokenizer.basic_tokenizer.never_split.update(nodes)
+        else:
+            self.tokenizer: BertTokenizer = BertTokenizer(
+                vocab_file=self.vocab_filename,
+                do_lower_case=False,
+                never_split=nodes,
+            )
+            self._model: BertForMaskedLM = BertForMaskedLM(
+                BertConfig(
+                    vocab_size=self._vocabulary_size,
+                    max_position_embeddings=512,
+                    type_vocab_size=1,
+                )
+            )
+
     def fit(self, walks: List[List[SWalk]], is_update: bool = False):
         """Fits the BERT model based on provided walks.
 
@@ -96,28 +138,13 @@ class BERT(Embedder):
             The fitted Word2Vec model.
 
         """
-        walks = [walk for entity_walks in walks for walk in entity_walks]
-        nodes = list({node for walk in walks for node in walk})
-        self._build_vocabulary(nodes, is_update)
-        self.tokenizer = BertTokenizer(
-            vocab_file=self.vocab_filename,
-            do_lower_case=False,
-            never_split=nodes,
-        )
-        self.model_ = BertForMaskedLM(
-            BertConfig(
-                vocab_size=self._vocabulary_size,
-                max_position_embeddings=512,
-                type_vocab_size=1,
-            )
-        )
+        self.init_model(walks)
+
         Trainer(
-            model=self.model_,
+            model=self._model,
             args=self.training_args,
-            data_collator=DataCollatorForLanguageModeling(
-                tokenizer=self.tokenizer
-            ),
-            train_dataset=WalkDataset(walks, self.tokenizer),
+            data_collator=DataCollatorForLanguageModeling(tokenizer=self.tokenizer),
+            train_dataset=WalkDataset(self._corpus, self.tokenizer),
         ).train()
         return self
 
@@ -133,9 +160,9 @@ class BERT(Embedder):
             The features vector of the provided entities.
 
         """
-        check_is_fitted(self, ["model_"])
+        check_is_fitted(self, ["_model"])
         return [
-            self.model_.bert.embeddings.word_embeddings.weight[
+            self._model.bert.embeddings.word_embeddings.weight[
                 self.tokenizer(entity)["input_ids"][1]
             ]
             .cpu()
@@ -143,3 +170,33 @@ class BERT(Embedder):
             .numpy()
             for entity in entities
         ]
+
+    def embed(self, sentences: list[str]):
+        inputs = self.tokenizer(
+            sentences, return_tensors="pt", padding=True, truncation=True
+        )
+        with torch.no_grad():
+            outputs: MaskedLMOutput = self._model(**inputs)
+
+        last_hidden_state = outputs.hidden_states[-1]
+
+        attention_mask = inputs["attention_mask"]
+        masked_embeddings = last_hidden_state * attention_mask.unsqueeze(-1)
+        sentence_embeddings = masked_embeddings.sum(dim=1) / attention_mask.sum(
+            dim=1, keepdim=True
+        )
+
+        return sentence_embeddings
+
+    def predict(self, walks: List[List[SWalk]]) -> Embeddings:
+        """Predicts the embeddings of the provided entities.
+
+        Args:
+            entities: The entities to predict the embeddings.
+
+        Returns:
+            The embeddings of the provided entities.
+
+        """
+        corpus = [" ".join(walk) for entity_walks in walks for walk in entity_walks]
+        return self.embed(corpus)
