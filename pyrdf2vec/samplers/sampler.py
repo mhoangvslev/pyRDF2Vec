@@ -47,9 +47,7 @@ class Sampler(ABC):
 
     split = attr.ib(default=False, validator=attr.validators.instance_of(bool))
 
-    _is_support_remote = attr.ib(
-        init=False, type=bool, repr=False, default=False
-    )
+    _is_support_remote = attr.ib(init=False, type=bool, repr=False, default=False)
 
     _random_state = attr.ib(
         init=False,
@@ -58,13 +56,9 @@ class Sampler(ABC):
         default=None,
     )
 
-    _vertices_deg = attr.ib(
-        init=False, type=Dict[str, int], repr=False, factory=dict
-    )
+    _vertices_deg = attr.ib(init=False, type=Dict[str, int], repr=False, factory=dict)
 
-    _visited = attr.ib(
-        init=False, type=Set[Tuple[Hop, int]], repr=False, factory=set
-    )
+    _visited = attr.ib(init=False, type=Set[Tuple[Hop, int]], repr=False, factory=set)
 
     @abstractmethod
     def fit(self, kg: KG) -> None:
@@ -122,18 +116,34 @@ class Sampler(ABC):
         if {} in weights:
             return []
         if self.inverse:
-            weights = [
-                max(weights) - (weight - min(weights)) for weight in weights
-            ]
+            weights = [max(weights) - (weight - min(weights)) for weight in weights]
         if self.split:
             weights = [
                 weight / self._vertices_deg[hop[1].name]
                 for weight, hop in zip(weights, hops)
                 if self._vertices_deg[hop[1].name] != 0
             ]
-        return [
-            weight / sum(weights) for weight in weights if sum(weights) != 0
+        return [weight / sum(weights) for weight in weights if sum(weights) != 0]
+
+    @abstractmethod
+    def get_candidate_hops(
+        self, kg: KG, walk: Walk, is_reverse: bool = False
+    ) -> Optional[List[Hop]]:
+        subj = walk[0] if is_reverse else walk[-1]
+
+        untagged_neighbors = [
+            pred_obj
+            for pred_obj in kg.get_hops(subj, is_reverse)
+            if (pred_obj, len(walk)) not in self.visited
         ]
+
+        if len(untagged_neighbors) == 0:
+            if len(walk) > 2:
+                pred_obj = (walk[1], walk[0]) if is_reverse else (walk[-2], walk[-1])
+                self.visited.add((pred_obj, len(walk) - 2))
+            return None
+
+        return untagged_neighbors
 
     def sample_hop(
         self, kg: KG, walk: Walk, is_last_hop: bool, is_reverse: bool = False
@@ -154,20 +164,10 @@ class Sampler(ABC):
             An unvisited hop in the (predicate, object) form.
 
         """
-        subj = walk[0] if is_reverse else walk[-1]
 
-        untagged_neighbors = [
-            pred_obj
-            for pred_obj in kg.get_hops(subj, is_reverse)
-            if (pred_obj, len(walk)) not in self.visited
-        ]
+        untagged_neighbors = self.get_candidate_hops(kg, walk, is_reverse)
 
-        if len(untagged_neighbors) == 0:
-            if len(walk) > 2:
-                pred_obj = (
-                    (walk[1], walk[0]) if is_reverse else (walk[-2], walk[-1])
-                )
-                self.visited.add((pred_obj, len(walk) - 2))
+        if untagged_neighbors is None:
             return None
 
         rnd_id = np.random.RandomState(self._random_state).choice(

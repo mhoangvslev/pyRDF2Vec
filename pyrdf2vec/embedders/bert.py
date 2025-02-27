@@ -96,7 +96,7 @@ class BERT(Embedder):
                 f.write(f"{node}\n")
                 self._vocabulary_size += 1
 
-    def init(self, walks: List[List[SWalk]]):
+    def init(self, walks: List[List[SWalk]]) -> Embedder:
         self._corpus = [walk for entity_walks in walks for walk in entity_walks]
         nodes = list({node for walk in self._corpus for node in walk})
         self._build_vocabulary(nodes)
@@ -124,6 +124,7 @@ class BERT(Embedder):
                     type_vocab_size=1,
                 )
             )
+        return self
 
     def fit(self, walks: List[List[SWalk]], is_update: bool = False):
         """Fits the BERT model based on provided walks.

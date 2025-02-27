@@ -67,3 +67,6 @@ class UniformSampler(Sampler):
 
         """
         return 1
+    
+    def get_candidate_hops(self, kg, walk, is_reverse = False):
+        return super().get_candidate_hops(kg, walk, is_reverse)
