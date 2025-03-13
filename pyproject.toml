@@ -39,6 +39,11 @@ include = [
     "CODE_OF_CONDUCT.rst",
 ]
 
+[[tool.poetry.source]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+priority = "explicit"
+
 [tool.poetry.dependencies]
 aiohttp = "^3.8.1"
 attrs = ">=21.2,<24.0"
@@ -56,7 +61,10 @@ python-louvain = "^0.16"
 rdflib = "^6.1.1"
 scikit-learn = "^1.0.2"
 toml = "^0.10.2"
-torch = "^1.8.1"
+torch = [
+    { version = "~2.2.1", source = "pytorch-cpu", markers = "sys_platform != 'darwin'" }, # For non-macOS users
+    { version = "2.2.1", markers = "sys_platform == 'darwin'" },                          # For macOS users
+]
 tqdm = "^4.61.0"
 
 [tool.poetry.group.dev.dependencies]
