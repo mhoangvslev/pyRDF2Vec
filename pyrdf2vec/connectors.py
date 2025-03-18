@@ -28,26 +28,23 @@ class Connector(ABC):
 
     """
 
-    endpoint = attr.ib(
-        type=str,
+    endpoint: str = attr.ib(
         validator=attr.validators.instance_of(str),
     )
 
-    cache = attr.ib(
+    cache: Cache = attr.ib(
         kw_only=True,
-        type=Cache,
         factory=lambda: TTLCache(maxsize=1024, ttl=1200),
         validator=attr.validators.optional(attr.validators.instance_of(Cache)),
     )
 
-    _headers = attr.ib(
+    _headers: Dict[str, str] = attr.ib(
         init=False,
-        type=Dict[str, str],
         repr=False,
         default={"Accept": "application/sparql-results+json"},
     )
 
-    _asession = attr.ib(init=False, default=None)
+    _asession: aiohttp.ClientSession = attr.ib(init=False, default=None)
 
     async def close(self) -> None:
         """Closes the aiohttp session."""

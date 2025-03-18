@@ -52,56 +52,48 @@ class Walker(ABC):
 
     """
 
-    kg = attr.ib(init=False, repr=False, type=Optional[KG], default=None)
+    kg: Optional[KG] = attr.ib(init=False, repr=False, default=None)
 
-    max_depth = attr.ib(
-        type=int,
+    max_depth: int = attr.ib(
         validator=[attr.validators.instance_of(int), _check_max_depth],
     )
 
-    max_walks = attr.ib(  # type: ignore
+    max_walks: Optional[int] = attr.ib(
         default=None,
-        type=Optional[int],
         validator=[
             attr.validators.optional(attr.validators.instance_of(int)),
             _check_max_walks,
         ],
     )
 
-    sampler = attr.ib(
+    sampler: Sampler = attr.ib(
         factory=lambda: UniformSampler(),
-        type=Sampler,
-        validator=attr.validators.instance_of(Sampler),  # type: ignore
+        validator=attr.validators.instance_of(Sampler),
     )
 
-    n_jobs = attr.ib(  # type: ignore
+    n_jobs: Optional[int] = attr.ib(  # type: ignore
         default=None,
-        type=Optional[int],
         validator=[
             attr.validators.optional(attr.validators.instance_of(int)),
             _check_jobs,
         ],
     )
 
-    with_reverse = attr.ib(
+    with_reverse: Optional[bool] = attr.ib(
         kw_only=True,
-        type=Optional[bool],
         default=False,
         validator=attr.validators.instance_of(bool),
     )
 
-    random_state = attr.ib(
+    random_state: Optional[int] = attr.ib(
         kw_only=True,
-        type=Optional[int],
         default=None,
         validator=attr.validators.optional(attr.validators.instance_of(int)),
     )
 
-    _is_support_remote = attr.ib(
-        init=False, repr=False, type=bool, default=True
-    )
+    _is_support_remote: bool = attr.ib(init=False, repr=False, default=True)
 
-    _entities = attr.ib(init=False, repr=False, type=Set[str], default=set())
+    _entities: Set[str] = attr.ib(init=False, repr=False, default=set())
 
     def __attrs_post_init__(self):
         if self.n_jobs == -1:
@@ -206,9 +198,7 @@ class Walker(ABC):
 
         """
         return list(
-            walks
-            for entity_to_walks in res
-            for walks in entity_to_walks.values()
+            walks for entity_to_walks in res for walks in entity_to_walks.values()
         )
 
     def _proc(self, entity: str) -> EntityWalks:

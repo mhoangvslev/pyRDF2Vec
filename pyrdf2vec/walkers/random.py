@@ -40,9 +40,8 @@ class RandomWalker(Walker):
 
     """
 
-    md5_bytes = attr.ib(
+    md5_bytes: Optional[int] = attr.ib(
         kw_only=True,
-        type=Optional[int],
         default=8,
         repr=False,
     )

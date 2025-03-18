@@ -45,15 +45,13 @@ class RDF2VecTransformer:
 
     """
 
-    embedder = attr.ib(
+    embedder: Embedder = attr.ib(
         factory=lambda: Word2Vec(),
-        type=Embedder,
         validator=attr.validators.instance_of(Embedder),  # type: ignore
     )
 
-    walkers = attr.ib(
+    walkers: Sequence[Walker] = attr.ib(
         factory=lambda: [RandomWalker(2)],  # type: ignore
-        type=Sequence[Walker],
         validator=attr.validators.deep_iterable(
             member_validator=attr.validators.instance_of(
                 Walker  # type: ignore
@@ -62,28 +60,26 @@ class RDF2VecTransformer:
         ),
     )
 
-    verbose = attr.ib(
+    verbose: int = attr.ib(
         kw_only=True,
         default=0,
-        type=int,
         validator=attr.validators.in_([0, 1, 2]),
     )
 
-    _is_extract_walks_literals = attr.ib(
+    _is_extract_walks_literals: bool = attr.ib(
         init=False,
         default=False,
-        type=bool,
         repr=False,
         validator=attr.validators.instance_of(bool),
     )
 
-    _embeddings = attr.ib(init=False, type=Embeddings, factory=list)
-    _entities = attr.ib(init=False, type=Entities, factory=list)
-    _literals = attr.ib(init=False, type=Literals, factory=list)
-    _walks = attr.ib(init=False, type=List[List[SWalk]], factory=list)
+    _embeddings: Embeddings = attr.ib(init=False, factory=list)
+    _entities: Entities = attr.ib(init=False, factory=list)
+    _literals: Literals = attr.ib(init=False, factory=list)
+    _walks: List[List[SWalk]] = attr.ib(init=False, factory=list)
 
-    _pos_entities = attr.ib(init=False, type=List[str], factory=list)
-    _pos_walks = attr.ib(init=False, type=List[int], factory=list)
+    _pos_entities: List[str] = attr.ib(init=False, factory=list)
+    _pos_walks: List[int] = attr.ib(init=False, factory=list)
 
     def fit(
         self, kg: KG, entities: Entities, is_update: bool = False
@@ -114,9 +110,7 @@ class RDF2VecTransformer:
             n_walks = sum([len(entity_walks) for entity_walks in walks])
             print(f"Fitted {n_walks} walks ({toc - tic:0.4f}s)")
             if len(self._walks) != len(walks):
-                n_walks = sum(
-                    [len(entity_walks) for entity_walks in self._walks]
-                )
+                n_walks = sum([len(entity_walks) for entity_walks in self._walks])
                 print(
                     f"> {n_walks} walks extracted "
                     + f"for {len(self._entities)} entities."
@@ -190,17 +184,11 @@ class RDF2VecTransformer:
                 f"Extracted {n_walks} walks "
                 + f"for {len(entities)} entities ({toc - tic:0.4f}s)"
             )
-        if (
-            kg._is_remote
-            and kg.mul_req
-            and not self._is_extract_walks_literals
-        ):
+        if kg._is_remote and kg.mul_req and not self._is_extract_walks_literals:
             asyncio.run(kg.connector.close())
         return walks
 
-    def transform(
-        self, kg: KG, entities: Entities
-    ) -> Tuple[Embeddings, Literals]:
+    def transform(self, kg: KG, entities: Entities) -> Tuple[Embeddings, Literals]:
         """Transforms the provided entities into embeddings and literals.
 
         Args:
@@ -286,7 +274,5 @@ class RDF2VecTransformer:
         with open(filename, "rb") as f:
             transformer = pickle.load(f)
             if not isinstance(transformer, RDF2VecTransformer):
-                raise ValueError(
-                    "Failed to load the RDF2VecTransformer object"
-                )
+                raise ValueError("Failed to load the RDF2VecTransformer object")
             return transformer
